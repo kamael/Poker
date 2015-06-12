@@ -94,7 +94,8 @@ class Poker:
 
 class Agent():
 
-    def __init__(self, values):
+    def __init__(self, values, index):
+        self.index = index
         self.values = values
         self.update()
 
@@ -172,32 +173,65 @@ class Agent():
             if n >= len_shunzi[i]:
                 store_shunzi[i].append([start - n + 1, n])
 
+        self.fours = sorted(list(self.fours))
+        self.triples = sorted(list(self.triples))
+        self.twices = sorted(list(self.twices))
+        self.singles = sorted(list(self.singles))
+
+
     def choose_dz(self, pValue):
         if random.randint(0, 2) == 0:
             self.add(pValue)
             return True
         return False
 
+    def empty(self):
+        return self.values == []
+
+    def get_value_by_type(self, poker_type):
+        if poker_type[0] == "singles":
+            return poker_type[1]
+        if poker_type[0] == "twices":
+            return poker_type[1] * 2
+        if poker_type[0] == "triples":
+            return [poker_type[1][0]] * 3 + \
+                [poker_type[1][1][0]] * poker_type[1][1][1]
+        if poker_type[0] == "fours":
+            return poker_type[1] * 4
+        #
+        return []
+
+
     def action(self, game):
+        # return a list of put out pokers' value and type
         print "Agent need has a action"
         sys.exit()
+
+"""
+type:
+    [53, 54]                        -> ["jokers", []]
+    [3]                             -> ["singles", [3]]
+    [3, 3]                          -> ["twices", [3]]
+    [3, 3, 3, 4, 4]                 -> ["triples", [3, [4, 2]]]
+    [3, 3, 3, 3]                    -> ["fours", [3]]
+    [3, 4, 5, 6, 7]                 -> ["shunzi_s", [3, 5]]
+    [3, 3, 3, 4, 4, 4, 5, 5, 6, 6]  -> ["shunzi_sss",
+                                        [[3, 2], [5, 2], [6, 2]]
+                                        ]
+"""
 
 
 class AgentBot(Agent):
     def action(self, game):
 
-        try:
-            getattr(self, "x")
-        except:
-            self.x = []
-        if isinstance(self.x, list):
-            self.x = 1
-            self.p1()
-
-        if random.randint(0, 30) == 0:
-            game.end = True
-
-    def p1(self):
+        two_jokers = False
+        fours = []
+        shunzi_sss = []
+        shunzi_ss = []
+        shunzi_s = []
+        triples = []
+        twices = []
+        singles = []
 
         values = [i for i in self.values]
 
@@ -211,41 +245,49 @@ class AgentBot(Agent):
             jokers.append(53)
         if len(jokers) == 2:
             print "has two jokers"
+            two_jokers = True
         else:
             self.add(jokers)
 
         if len(self.fours):
             print "has fours: %s" % self.fours
+            fours = [i for i in self.fours]
             for item in self.fours:
                 self.send([item] * 4)
 
         if len(self.shunzi_sss):
             print "has shunzi_sss: %s" % self.shunzi_sss
+            shunzi_sss = [i for i in self.shunzi_sss]
             for item in self.shunzi_sss:
                 self.send([i for i in range(item[0], item[0] + item[1])] * 3)
 
         if len(self.shunzi_ss):
             print "has shunzi_ss: %s" % self.shunzi_ss
+            shunzi_ss = [i for i in self.shunzi_ss]
             for item in self.shunzi_ss:
                 self.send([i for i in range(item[0], item[0] + item[1])] * 2)
 
         if len(self.shunzi_s):
             print "has shunzi_s: %s" % self.shunzi_s
+            shunzi_s = [i for i in self.shunzi_s]
             for item in self.shunzi_s:
                 self.send([i for i in range(item[0], item[0] + item[1])])
 
         if len(self.triples):
             print "has triples: %s" % self.triples
+            triples = [i for i in self.triples]
             for item in self.triples:
                 self.send([item] * 3)
 
         if len(self.twices):
             print "has twices: %s" % self.twices
+            twices = [i for i in self.twices]
             for item in self.twices:
                 self.send([item] * 2)
 
         if len(self.singles):
             print "has singles: %s" % self.singles
+            singles = [i for i in self.singles]
             for item in self.singles:
                 self.send([item])
 
@@ -253,6 +295,47 @@ class AgentBot(Agent):
             raise
 
         self.add(values)
+
+        send = [None, None]
+
+
+
+
+
+        if not game.puts or game.puts[-1][0] == self.index:
+            #MUST SEND POKER
+            if singles:
+                send = ["singles", [singles[0]]]
+            elif twices:
+                send = ["twices", [twices[0]]]
+            elif shunzi_sss:
+                pass
+
+        else:
+            last = game.puts[-1][1]
+            if last[0] == 'singles':
+                value = last[1][0]
+                i = 0
+                while i < len(singles):
+                    if singles[i] > value:
+                        send = ["singles", [singles[i]]]
+                        break
+                    i += 1
+                if i == 0 or i == len(singles):
+                    send = [None, None]
+
+
+
+
+
+
+        self.send(self.get_value_by_type(send))
+        game.end = self.empty()
+
+        if random.randint(0, 100) == 0:
+            game.end = True
+
+        return send
 
 
 
@@ -262,13 +345,15 @@ class Game():
         self.end = False
         self.winner = None
         self.poker = Poker()
-        self.ag1 = AgentBot(self.poker.aValue)
-        self.ag2 = AgentBot(self.poker.bValue)
-        self.ag3 = AgentBot(self.poker.cValue)
+        self.ag1 = AgentBot(self.poker.aValue, 0)
+        self.ag2 = AgentBot(self.poker.bValue, 1)
+        self.ag3 = AgentBot(self.poker.cValue, 2)
         self.agents = [self.ag1, self.ag2, self.ag3]
 
         self.dz_index = None
         self.__choose_dz()
+
+        self.puts = []
 
     def __choose_dz(self):
         did = False
@@ -295,10 +380,14 @@ def main():
         for i in range(3):
             cur = (i + game.dz_index) % 3
             print "agent %d is action" % cur
-            game.agents[cur].action(game)
+            send_poker = game.agents[cur].action(game)
+            if send_poker[0]:
+                game.puts.append([game.agents[cur].index, send_poker])
             if game.end:
                 game.winner = cur
                 break
+
+    print game.puts
 
     print "end"
     print "winner: %d" % game.winner
